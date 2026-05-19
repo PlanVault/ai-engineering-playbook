@@ -1,0 +1,83 @@
+---
+description: REST API Design Standards Agent
+globs: "**/routes/**/*.*, **/*Controller*.*, **/*Router*.*, **/*Handler*.*, **/openapi*.yaml, **/openapi*.json"
+alwaysApply: false
+---
+Role: API Design Reviewer.
+Task: Ensure all HTTP API endpoints follow consistent REST conventions, error standards, and security practices.
+
+## NAMING & STRUCTURE
+- Resources are plural nouns: `/users`, `/orders`, `/invoices`. Never verbs (`/getUser`, `/createOrder`).
+- Hierarchy reflects ownership: `/orgs/{orgId}/projects/{projectId}/tasks`.
+- Actions that don't map to CRUD use a sub-resource noun: `POST /payments/{id}/refunds`, not `POST /refundPayment`.
+- API version is in the URL path: `/v1/users`. Never in headers for public APIs.
+
+## HTTP METHOD SEMANTICS
+| Intent | Method | Idempotent? |
+|---|---|---|
+| Fetch resource | GET | ✅ |
+| Full replace | PUT | ✅ |
+| Partial update | PATCH | ❌ |
+| Create | POST | ❌ |
+| Delete | DELETE | ✅ |
+
+- Use `PUT` only when the client sends the complete resource. Use `PATCH` for partial updates.
+- Mutations that must be safe to retry (payments, emails) MUST accept an `Idempotency-Key` header.
+
+## ERROR RESPONSES — RFC 7807 ProblemDetail
+
+```json
+// ✅ GOOD — structured, machine-readable error
+{
+  "type": "https://api.example.com/errors/validation-failed",
+  "title": "Validation Failed",
+  "status": 422,
+  "detail": "Field 'email' must be a valid email address.",
+  "instance": "/v1/users",
+  "traceId": "4bf92f3577b34da6a3ce929d0e0e4736"
+}
+
+// ❌ BAD — plain string, no machine-readable type, no trace
+{ "error": "invalid email" }
+```
+
+## PAGINATION
+- List endpoints MUST be paginated. Never return unbounded arrays.
+- Use cursor-based pagination for large or real-time datasets:
+
+```json
+// ✅ GOOD — cursor pagination
+GET /v1/orders?cursor=eyJpZCI6MTIzfQ&limit=50
+
+{
+  "data": [...],
+  "nextCursor": "eyJpZCI6MTczfQ",
+  "hasMore": true
+}
+
+// ❌ BAD — offset pagination breaks on inserts and has O(n) DB cost
+GET /v1/orders?page=5&pageSize=50
+```
+
+## RESPONSE SHAPE
+- Successful responses wrap data in a `data` key for list endpoints.
+- Always include `createdAt` and `updatedAt` timestamps on resources.
+- Do NOT leak internal IDs (auto-increment integers). Use UUIDs or opaque string IDs.
+
+```json
+// ✅ GOOD
+{ "data": { "id": "usr_01HX...", "email": "alice@example.com", "createdAt": "2024-01-15T12:00:00Z" } }
+
+// ❌ BAD — exposes internal sequence, no timestamps
+{ "id": 42, "email": "alice@example.com" }
+```
+
+## SECURITY
+- All endpoints MUST require authentication unless explicitly marked public.
+- Validate and sanitize ALL query params and path params server-side.
+- Rate-limit mutating endpoints (`POST`, `PUT`, `PATCH`, `DELETE`).
+
+## FINALIZATION
+- Ensure the OpenAPI spec (`openapi.yaml`) is updated to reflect any new or changed endpoints.
+- Verify error responses match RFC 7807 format.
+- Check that all list endpoints have pagination.

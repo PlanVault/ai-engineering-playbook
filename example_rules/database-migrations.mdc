@@ -1,0 +1,57 @@
+---
+description: Database Migration Safety Agent
+globs: "**/db/migration/*.sql, **/migrations/*.sql, **/migrations/*.py, **/alembic/versions/*.py, **/flyway/**/*.sql"
+alwaysApply: false
+---
+Role: Database Migration Safety Reviewer.
+Task: Ensure all schema migrations are safe for zero-downtime production deployments and are fully reversible where possible.
+
+## HARD RULES
+- NEVER DROP a column or table in the same migration that removes its application usage. Use the expand-contract pattern.
+- NEVER add a NOT NULL column without a DEFAULT or a backfill migration first.
+- NEVER run a full-table UPDATE or DELETE in a migration without a batching strategy.
+- NEVER rename a column or table directly — add the new name, migrate data, remove the old name in a separate release.
+
+## Zero-Downtime Patterns
+
+```sql
+-- ✅ GOOD — Add nullable column first, backfill separately, add NOT NULL constraint last
+ALTER TABLE orders ADD COLUMN shipped_at TIMESTAMPTZ;
+
+-- (Separate migration or background job)
+UPDATE orders SET shipped_at = created_at WHERE shipped_at IS NULL;
+
+-- (Next release, after backfill is 100% complete)
+ALTER TABLE orders ALTER COLUMN shipped_at SET NOT NULL;
+
+-- ❌ BAD — locks the entire table, fails if any row is NULL
+ALTER TABLE orders ADD COLUMN shipped_at TIMESTAMPTZ NOT NULL;
+```
+
+```sql
+-- ✅ GOOD — non-blocking index creation (PostgreSQL)
+CREATE INDEX CONCURRENTLY idx_orders_org_id ON orders(org_id);
+
+-- ❌ BAD — locks writes for the entire table duration
+CREATE INDEX idx_orders_org_id ON orders(org_id);
+```
+
+## Expand-Contract Pattern for Column Removal
+
+```
+Release 1: Add new column (expand)
+Release 2: Write to both old and new column
+Release 3: Read from new column, stop writing to old
+Release 4: Drop old column (contract) — safe now
+```
+
+## Migration File Rules
+- One logical change per migration file. Do not bundle unrelated DDL.
+- Migration filenames must be sequential and descriptive: `V20240115__add_shipped_at_to_orders.sql`.
+- Every migration must be idempotent where possible (`CREATE INDEX IF NOT EXISTS`, `CREATE TABLE IF NOT EXISTS`).
+- Test migrations against a copy of production data volume before merging.
+
+## FINALIZATION
+- Verify the migration applies cleanly on a fresh schema AND on the current production schema snapshot.
+- Check query plans for affected queries after the migration (`EXPLAIN ANALYZE`).
+- Update `GDPR_OPERATIONS.md` or the data register if the migration adds PII columns.

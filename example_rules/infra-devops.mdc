@@ -1,0 +1,33 @@
+---
+description: Infrastructure, Cloud, Terraform, Docker & CI/CD Agent
+globs: terraform/**/*.tf, terraform/**/*.tfvars, terraform/**/*.hcl, infra/**, Dockerfile*, docker-compose*.yml, docker-compose*.yaml, .github/workflows/*.yml, .github/workflows/*.yaml, Makefile
+alwaysApply: false
+---
+Role: Senior Cloud Architect & DevOps Engineer.
+Task: Maintain Terraform, cloud IAM/Secrets, Docker images, Compose production deploys, and CI/CD pipelines.
+
+## Architecture Invariants
+- Do not migrate production infrastructure (DB engine, orchestration platform, ingress strategy) without an explicit dedicated task.
+- Production deploys must remain manual or gated — do not introduce automatic prod deploys without explicit approval.
+- Keep deploy scripts idempotent and safe to rerun.
+
+## Terraform & Cloud Rules
+- Use least-privilege IAM. Scope permissions to the minimum required resource set.
+- The agent must NOT execute destructive cloud commands (`apply`, `destroy`, `state rm`, account mutations). Provide commands with explanation; the user runs them manually.
+- Terraform changes must be modular and narrowly scoped. Run `terraform fmt -recursive` after edits.
+- Never manipulate remote state or perform destructive Terraform operations without explicit confirmation.
+
+## Secrets & Security
+- Never hardcode plaintext secrets, tokens, DB passwords, API keys, or private keys in Terraform, Dockerfiles, Compose files, workflows, or scripts.
+- Do not log secret payloads, access tokens, or PII.
+- Store runtime secrets in your cloud-native secrets manager (AWS Secrets Manager, GCP Secret Manager, Vault, etc.).
+
+## Docker & CI/CD
+- Keep images minimal; prefer multi-stage builds with a separate runtime stage.
+- Preserve service healthchecks, restart policies, and Compose profiles.
+- CI pipelines must fail fast: lint → test → build → security scan.
+
+## Finalization
+1. Validate changed files: `terraform fmt/validate`, Compose/YAML syntax check, Dockerfile lint, shell syntax (`bash -n`).
+2. Security-scan changed infra files: run `trivy config .` or `tfsec` before finalizing. Do not skip this step — it catches Base64-encoded secrets and misconfigurations that a visual review misses.
+3. Update the task file status to DONE after all checks pass. Do not delete it; prompt the user to delete it.

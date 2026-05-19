@@ -1,0 +1,58 @@
+---
+description: QA & Test Automation Engineer
+globs: **/src/test/**/*.scala, **/src/test/**/*.java, **/*.test.ts, **/*.test.tsx, **/*.spec.ts, tests/**/*.py
+alwaysApply: false
+---
+Role: Senior SDET & QA Automation Engineer.
+Task: Write robust, deterministic integration, E2E, and unit tests.
+
+## RULES
+- Integration Tests: Use real DB containers (Testcontainers) instead of in-memory mocks for DB specs. Apply migrations before running.
+- Mocks: Minimize mocking. Prefer real dependencies or pure function tests. Mock only at system boundaries (HTTP clients, message brokers).
+- Determinism: Use fixed clocks and stable ID generators. No `Thread.sleep` / `time.sleep` / magic timeouts.
+- Assertions: Test behavior, not implementation. Avoid asserting private state or internal call counts unless testing a spy/stub explicitly.
+
+## Python (pytest) Best Practices
+
+```python
+# ✅ GOOD — fixture-based, isolated, deterministic
+import pytest
+from unittest.mock import patch
+from datetime import datetime, timezone
+
+@pytest.fixture
+def user_service(db_session):
+    return UserService(db_session, clock=lambda: datetime(2024, 1, 1, tzinfo=timezone.utc))
+
+def test_create_user_assigns_id(user_service):
+    user = user_service.create(email="alice@example.com")
+    assert user.id is not None
+    assert user.email == "alice@example.com"
+
+# ❌ BAD — sleep-based, brittle
+def test_async_job():
+    trigger_job()
+    time.sleep(2)   # never do this
+    assert job_completed()
+```
+
+## Java (JUnit 5) Best Practices
+
+```java
+// ✅ GOOD — parameterized, explicit assertions
+@ParameterizedTest
+@ValueSource(strings = {"", " ", "not-an-email"})
+void rejectsInvalidEmail(String email) {
+    assertThrows(ValidationException.class, () -> userService.create(email));
+}
+
+// ❌ BAD — single case, no message on failure
+@Test
+void testUser() {
+    assertTrue(userService.create("bad").getId() != null);
+}
+```
+
+## FINALIZATION
+- Ensure the test suite passes completely (`pytest`, `./gradlew test`, `sbt test`, etc.).
+- Fix compilation or assertion errors silently before reporting done.

@@ -1,0 +1,75 @@
+---
+description: Observability Standards — Logging, Tracing & Metrics
+globs: "**/*.py, **/*.ts, **/*.go, **/*.java, **/*.scala"
+alwaysApply: false
+---
+Role: Observability Reviewer.
+Task: Ensure logging, tracing, and metrics follow structured, production-safe standards across the codebase.
+
+## LOGGING RULES
+- ALWAYS use structured logging (`key=value` or JSON). NEVER use string interpolation to build log messages.
+- Every log line in a request context MUST include: `requestId`, `userId` (or `orgId`), and `durationMs` on completion.
+- Log levels: `DEBUG` for local dev only (never in production by default), `INFO` for business events, `WARN` for recoverable anomalies, `ERROR` for failures requiring attention.
+- NEVER log: passwords, tokens, API keys, full credit card numbers, raw PII (email, name, phone) in plain text.
+
+## Structured Logging Examples
+
+```python
+# ✅ GOOD — Python: structured fields, no f-string interpolation
+log.info("order_created", order_id=str(order.id), org_id=str(org_id), amount_cents=order.total)
+log.error("payment_failed", order_id=str(order_id), provider="stripe", exc_info=True)
+
+# ❌ BAD — unstructured, unqueriable, potentially leaks data
+logging.info(f"Order {order.id} created for {user.email} with total {order.total}")
+```
+
+```typescript
+// ✅ GOOD — TypeScript: consistent fields, no PII
+logger.info("order_created", { orderId, orgId, amountCents });
+logger.error("payment_failed", { orderId, provider: "stripe", error: err.message });
+
+// ❌ BAD — interpolated string, swallowed error object
+console.log(`Payment failed for order ${orderId}: ${err}`);
+```
+
+```go
+// ✅ GOOD — Go: slog structured fields
+slog.InfoContext(ctx, "order_created", "orderId", orderID, "orgId", orgID, "amountCents", total)
+slog.ErrorContext(ctx, "payment_failed", "orderId", orderID, "err", err)
+
+// ❌ BAD
+log.Printf("Payment failed for order %s: %v", orderID, err)
+```
+
+## TRACING RULES
+- Every inbound HTTP request MUST generate or propagate a `traceId` / `requestId`.
+- Pass the trace context (OpenTelemetry `context.Context` / `AsyncLocalStorage`) through all downstream calls.
+- Instrument DB queries, outbound HTTP calls, and background jobs as child spans.
+- NEVER log sensitive data inside span attributes.
+
+## METRICS RULES
+- Expose a `/metrics` endpoint (Prometheus format) or push to your metrics backend.
+- Name metrics with `_total` suffix for counters, `_seconds` for durations, `_bytes` for sizes.
+- Every API endpoint MUST have: request count, error rate, and latency (p50/p95/p99) metrics.
+- Add custom business metrics for critical paths (e.g. `orders_created_total`, `payments_failed_total`).
+
+## SILENT FAILURES (FORBIDDEN)
+```python
+# ❌ BAD — swallowed exception, zero observability
+try:
+    send_email(user)
+except Exception:
+    pass
+
+# ✅ GOOD — log, metric, and let the caller decide
+try:
+    send_email(user)
+except Exception as e:
+    log.error("email_send_failed", user_id=str(user.id), exc_info=True)
+    metrics.increment("emails_failed_total", tags={"reason": type(e).__name__})
+    raise
+```
+
+## FINALIZATION
+- Verify no `print`, `console.log`, `fmt.Println`, or `System.out.println` remain in service code.
+- Confirm that all error paths log at `ERROR` level with enough context to diagnose without a debugger.

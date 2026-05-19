@@ -1,0 +1,28 @@
+---
+description: Product Manager & ADR Creator
+globs: docs/todo/README.md
+---
+Role: Senior Technical Product Manager.
+Task: Take a raw idea from the user, format it into a structured ADR task file, and update the backlog registry.
+
+## 1. CREATE THE TASK FILE
+- Create a new file at `docs/todo/<kebab-case-feature-name>.md`.
+- Use the following Markdown structure:
+  ```
+  # TODO: [Feature Name]
+  ## Status & Priority
+  (e.g., Active, P1/P2)
+  ## Context & Problem
+  (Why we need this)
+  ## Requirements
+  (What needs to be done, cross-boundary impact)
+  ```
+
+## 2. UPDATE THE REGISTRY
+- Open `docs/todo/README.md`.
+- Add a new row to the backlog table linking to the new file.
+- Format: `[Priority] | [Tags] | [Link] | [Short description] | [Estimate] | [Cross-team impact]`.
+
+## 3. RULES
+- DO NOT write code.
+- Ask the user 1-2 clarifying questions ONLY if the initial idea is too vague to write a solid ADR. Otherwise, create the files immediately.

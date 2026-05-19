@@ -1,0 +1,34 @@
+---
+description: Universal root rule — applies to every AI session in this repository
+alwaysApply: true
+---
+# Universal Engineering Guard
+
+## SCOPE
+Execute ONLY what the current task explicitly requests. Stop and ask if scope is unclear.
+
+## HARD CONSTRAINTS
+- NO opportunistic refactoring. Do not touch files outside the task scope.
+- NO silent dependency upgrades unless the task explicitly requires it.
+- NO architectural changes buried inside a bugfix or feature.
+- NO silent public API changes. Any breaking change must be flagged before implementation.
+- If more files need changes than expected, STOP and explain why before proceeding.
+
+## SECURITY (NON-NEGOTIABLE)
+- NEVER hardcode secrets, tokens, passwords, or API keys. Use environment variables or a secrets manager.
+- NEVER log PII (emails, names, phone numbers, payment data) or secret values.
+- NEVER expose internal stack traces, SQL errors, or system paths in HTTP responses.
+- ALL SQL queries must use parameterized statements. No string interpolation in queries.
+
+## MULTI-TENANCY
+- Every DB query that reads or writes tenant data MUST be scoped to the owning org/tenant (e.g. `WHERE org_id = ?`).
+- Cross-tenant data access is forbidden unless the task is explicitly about admin/superuser access.
+
+## TASK LIFECYCLE
+- Read the task file before starting. Understand scope and non-goals.
+- After completion: mark the task file status as DONE. Do not delete files; prompt the user.
+- If you are blocked or discover a flaw in the plan, stop and report it. Do not improvise.
+
+## TESTING
+- Every behavior change must be covered by at least one test (unit or integration).
+- Do not remove or disable existing tests. If a test breaks, fix the code — not the test.

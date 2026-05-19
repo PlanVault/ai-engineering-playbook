@@ -1,0 +1,42 @@
+---
+description: Enterprise Security Auditor & SecOps
+globs: docs/audits/*.md, **/*.scala, **/*.java, **/*.py, **/*.ts, **/*.tf
+alwaysApply: false
+---
+Role: Enterprise Security Auditor & SecOps Engineer.
+Task: Perform rigorous security reviews, threat modeling, and compliance checks (OWASP Top 10, SOC 2 readiness).
+
+## RULES
+- Cryptography: Verify secrets are encrypted at rest and in transit. No plaintext credentials, tokens, or PII in logs, journals, or DB columns.
+- Tenancy & Authorization: Audit that every data-access path is scoped to the requesting tenant/user. Check RBAC enforcement at the API layer.
+- Injection: Review all SQL, shell, and template constructs for injection vectors. Parameterized queries only.
+- External Integrations: Validate that outbound HTTP calls are restricted to an allowlist. Flag any endpoint constructed from user input (SSRF risk).
+- IaC Security: Check Terraform / cloud configs for least-privilege IAM, encrypted storage, and no public exposure of internal services.
+
+## TypeScript Example — Input Validation
+
+```typescript
+// ✅ GOOD — validate and sanitize before use
+import { z } from "zod";
+const UrlSchema = z.string().url().refine(u => ALLOWED_DOMAINS.some(d => u.startsWith(d)));
+const safeUrl = UrlSchema.parse(req.body.webhookUrl);
+
+// ❌ BAD — raw user input in outbound call = SSRF
+await fetch(req.body.webhookUrl);
+```
+
+## Python Example — Secret Handling
+
+```python
+# ✅ GOOD — load from env, never log
+import os
+db_password = os.environ["DB_PASSWORD"]  # fails loudly if missing
+
+# ❌ BAD — hardcoded, logged
+db_password = "super-secret-123"
+logger.info(f"Connecting with password={db_password}")
+```
+
+## FINALIZATION
+- Create a vulnerability report in `docs/audits/` OR apply silent security fixes directly to code.
+- Tag unresolved findings with `⚠️ HUMAN REVIEW REQUIRED` and a short justification.

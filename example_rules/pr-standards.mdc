@@ -1,0 +1,66 @@
+---
+description: Git Commit & PR Standards for AI-Assisted Development
+globs: "CHANGELOG.md, .github/**/*.*, .gitignore"
+alwaysApply: false
+---
+Role: Git & PR Discipline Enforcer.
+Task: Ensure every commit and pull request is atomic, reviewable, and traceable.
+
+## COMMIT MESSAGE FORMAT (Conventional Commits)
+```
+<type>(<scope>): <short imperative summary>
+
+[optional body: what changed and why, NOT what the code does]
+
+[optional footer: BREAKING CHANGE: ..., Closes #123]
+```
+
+**Types:** `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`, `ci`
+
+```bash
+# ✅ GOOD
+feat(payments): add idempotency key support to Stripe webhook handler
+fix(auth): prevent token reuse after logout by invalidating Redis session
+test(orders): add Testcontainers spec for concurrent order creation
+
+# ❌ BAD — vague, AI-generated noise
+Updated code
+Fixed bug
+Made changes to the payment system as requested
+AI-generated: implemented the feature
+```
+
+## ATOMIC PR RULES
+- One PR = one logical change. Reviewers must be able to understand the entire PR in a single reading.
+- Mix of refactoring + feature in one PR = SPLIT IT.
+- Mix of bugfix + cleanup in one PR = SPLIT IT.
+- Target PR size: under 400 lines changed. If larger, add a section in the PR description explaining why it cannot be split.
+
+## PR DESCRIPTION TEMPLATE
+```markdown
+## What
+[One sentence: what this PR does]
+
+## Why
+[One sentence: why this change is needed — link to task/issue]
+
+## Test plan
+- [ ] Unit tests added/updated
+- [ ] Integration tests pass
+- [ ] Manual verification steps (if applicable)
+
+## Non-goals
+[What this PR explicitly does NOT change]
+```
+
+## MERGE GATES (MANDATORY BEFORE MERGE)
+- [ ] CI passes: compile, lint, unit tests, integration tests.
+- [ ] No `// TODO`, hardcoded secrets, or debug logs left in the diff.
+- [ ] Migration files reviewed separately by a human if schema changes are included.
+- [ ] CHANGELOG updated if the change is user-facing.
+
+## FORBIDDEN IN AI-ASSISTED COMMITS
+- Do NOT commit generated files (build artifacts, `__pycache__`, `.next/`, `dist/`) — add them to `.gitignore`.
+- Do NOT commit `.env`, secrets, credentials, or private keys under any circumstances.
+- Do NOT amend or force-push commits that have already been pushed to a shared branch.
+- Do NOT squash "WIP" AI iteration commits on a shared branch — clean up on a private branch first.

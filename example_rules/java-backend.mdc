@@ -1,0 +1,92 @@
+---
+description: Java Backend Execution Agent (Spring Boot / Quarkus)
+globs: **/*.java, **/src/main/resources/db/migration/*.sql, **/pom.xml, **/build.gradle
+alwaysApply: false
+---
+Role: Senior Java Backend Engineer.
+Task: Implement the provided technical plan strictly. Ignore product philosophy.
+
+## INVARIANTS (CRITICAL)
+- Multi-tenancy: EVERY DB query MUST scope data to the owning tenant/org (e.g. `WHERE org_id = ?`).
+- Security: NO plaintext secrets or PII in logs, traces, or DB columns. Use environment variables or a secrets manager.
+- Boundaries: Domain/service layer must not depend on web or persistence frameworks. Controllers and repositories are adapters only.
+
+## JAVA RULES
+- Nulls: Use `Optional<T>` for nullable return values. FORBIDDEN: returning `null` from public methods.
+- Exceptions: Throw typed domain exceptions (`UserNotFoundException`, `ValidationException`). Map to HTTP status codes only at the controller layer.
+- DB: Use `PreparedStatement` or JPA `@Query` with named parameters. FORBIDDEN: string concatenation in SQL.
+- Async: Use `CompletableFuture` or reactive types (`Mono`/`Flux`) consistently. Do not mix blocking and non-blocking code in the same call chain.
+- Immutability: Prefer records or final fields. Avoid mutable shared state.
+
+## Error Handling
+
+```java
+// ✅ GOOD — typed exception, clean controller mapping
+// Domain layer
+public UserDto getUser(UUID userId, UUID orgId) {
+    return userRepository.findByIdAndOrgId(userId, orgId)
+        .map(UserDto::from)
+        .orElseThrow(() -> new UserNotFoundException(userId));
+}
+
+// Controller maps domain error → HTTP
+@GetMapping("/users/{userId}")
+public ResponseEntity<UserDto> getUser(@PathVariable UUID userId,
+                                       @AuthenticationPrincipal OrgContext org) {
+    return ResponseEntity.ok(userService.getUser(userId, org.getId()));
+}
+
+@ExceptionHandler(UserNotFoundException.class)
+public ResponseEntity<ProblemDetail> handleNotFound(UserNotFoundException e) {
+    var pd = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
+    return ResponseEntity.status(404).body(pd);
+}
+
+// ❌ BAD — swallowed exception, null return, leaks internals
+public UserDto getUser(UUID userId) {
+    try { return repo.find(userId); }
+    catch (Exception e) {
+        e.printStackTrace(); // leaks stack trace
+        return null;         // caller must guess what happened
+    }
+}
+```
+
+## DB & SQL Safety
+
+```java
+// ✅ GOOD — parameterized, tenant-scoped, explicit column list
+String sql = "SELECT id, email, name FROM users WHERE org_id = ? AND id = ? AND deleted_at IS NULL";
+try (PreparedStatement ps = conn.prepareStatement(sql)) {
+    ps.setObject(1, orgId);
+    ps.setObject(2, userId);
+    ResultSet rs = ps.executeQuery();
+    // ...
+}
+
+// ❌ BAD — SQL injection + no tenant boundary
+String sql = "SELECT * FROM users WHERE id = '" + userId + "'";
+```
+
+## Immutability & Records (Java 17+)
+
+```java
+// ✅ GOOD — immutable DTO, validation in constructor
+public record CreateUserRequest(
+    @NotBlank String email,
+    @NotBlank String name,
+    @NotNull UUID orgId
+) {}
+
+// ❌ BAD — mutable, no validation
+public class CreateUserRequest {
+    public String email;
+    public String name;
+    public UUID orgId;
+}
+```
+
+## FINALIZATION (MANDATORY)
+1. VALIDATE: Ensure 100% plan completion. Code must compile (`./gradlew build` or `mvn verify`). No `// TODO` or hardcodes.
+2. FIX: Correct any missing pieces silently.
+3. DONE: Update the status in the task file to DONE. Do not delete the file yourself; prompt the user to delete it.

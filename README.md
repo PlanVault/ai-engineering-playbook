@@ -6,6 +6,26 @@
 
 ---
 
+## Quick Start
+
+1. **Copy the foundation rules** into `.cursor/rules/` (or your AI tool's rules folder). These two apply to every session automatically:
+   - [`root-rule.mdc`](example_rules/root-rule.mdc) — universal security, multi-tenancy, and scope guard
+   - [`change-budget.mdc`](example_rules/change-budget.mdc) — AI change budget enforcer with stop conditions
+
+2. **Add your stack rules** — pick the files that match your backend and frontend:
+   - `python-backend.mdc`, `java-backend.mdc`, `go-backend.mdc`, `javascript-backend.mdc`, `scala-backend.mdc`
+   - `react-frontend.mdc`
+
+3. **Add process rules** for the AI SDLC pipeline:
+   - `task-creator.mdc` → `planner.mdc` → *(implementer uses stack rule)* → `reviewer.mdc` → `qa-engineer.mdc`
+
+4. **Add cross-cutting rules** as needed:
+   - `database-migrations.mdc`, `api-design.mdc`, `observability.mdc`, `security-auditor.mdc`, `infra-devops.mdc`
+
+> All rules are in [`example_rules/`](example_rules/). Each file is self-contained and can be copied into any project.
+
+---
+
 ## 1. Core Principles
 
 1. **AI-readable, not AI-distorted.** The codebase must be understandable for both AI and humans. Do not break domain models just for the sake of model retrieval.
@@ -189,7 +209,65 @@ AI debugging can easily devolve into an infinite loop of breaking and fixing.
 
 ---
 
-## 12. Example Operating Manual (Prompts)
+## 12. Example Rules Library
+
+All rules live in [`example_rules/`](example_rules/). Copy the ones you need into `.cursor/rules/`.
+
+### Foundation — always active
+| File | Trigger | Purpose |
+|---|---|---|
+| [`root-rule.mdc`](example_rules/root-rule.mdc) | `alwaysApply: true` | Universal security, multi-tenancy, scope guard, and testing gate |
+| [`change-budget.mdc`](example_rules/change-budget.mdc) | `alwaysApply: true` | Prevents scope creep; defines STOP conditions and self-check before finalizing |
+
+### Process & Planning
+| File | Trigger | Purpose |
+|---|---|---|
+| [`task-creator.mdc`](example_rules/task-creator.mdc) | `docs/todo/README.md` | Turns raw ideas into structured ADR task files |
+| [`planner.mdc`](example_rules/planner.mdc) | `docs/todo/in_progress/*.md` | Converts ADRs into strict technical execution contracts |
+| [`context-delegate.mdc`](example_rules/context-delegate.mdc) | `docs/tmp/*-context.md` | Gathers codebase context and generates prompts for external LLMs |
+| [`reviewer.mdc`](example_rules/reviewer.mdc) | `*` | Cross-boundary code review, consistency checks, and cleanup |
+| [`pr-standards.mdc`](example_rules/pr-standards.mdc) | `.github/**` | Conventional Commits, atomic PR rules, and merge gates |
+| [`business-seo-analyst.mdc`](example_rules/business-seo-analyst.mdc) | `docs/ideas/*.md` | Breaks large product ideas into Phase 1 / Phase 2 scopes |
+
+### Language — Backend
+| File | Trigger | Purpose |
+|---|---|---|
+| [`python-backend.mdc`](example_rules/python-backend.mdc) | `**/*.py` | FastAPI/Django/Flask: async, mypy strict, parameterized SQL, typed errors |
+| [`java-backend.mdc`](example_rules/java-backend.mdc) | `**/*.java` | Spring Boot/Quarkus: Optional, typed exceptions, records, PreparedStatement |
+| [`go-backend.mdc`](example_rules/go-backend.mdc) | `**/*.go` | Explicit error wrapping, context propagation, errgroup, table-driven tests |
+| [`javascript-backend.mdc`](example_rules/javascript-backend.mdc) | `**/*.ts, **/*.js` | Node.js/Express/NestJS: strict TS, zod env validation, typed error middleware |
+| [`scala-backend.mdc`](example_rules/scala-backend.mdc) | `**/*.scala` | Cats Effect IO, Doobie fragments, sealed trait errors, parMapN |
+
+### Language — Frontend
+| File | Trigger | Purpose |
+|---|---|---|
+| [`react-frontend.mdc`](example_rules/react-frontend.mdc) | `**/*.tsx, **/*.ts` | React 18 + TypeScript: TanStack Query, strict types, i18n, RFC 7807 errors |
+| [`ui-ux-designer.mdc`](example_rules/ui-ux-designer.mdc) | `**/*.tsx` | Accessibility (a11y), visual hierarchy, design system consistency |
+
+### Infrastructure & Data
+| File | Trigger | Purpose |
+|---|---|---|
+| [`infra-devops.mdc`](example_rules/infra-devops.mdc) | Terraform, Docker, CI/CD files | Cloud infra, secrets management, trivy/tfsec security scan |
+| [`database-migrations.mdc`](example_rules/database-migrations.mdc) | SQL and migration files | Zero-downtime patterns, expand-contract, `CREATE INDEX CONCURRENTLY` |
+| [`api-design.mdc`](example_rules/api-design.mdc) | Routes and controller files | REST naming, RFC 7807 errors, cursor pagination, idempotency keys |
+
+### Quality & Observability
+| File | Trigger | Purpose |
+|---|---|---|
+| [`qa-engineer.mdc`](example_rules/qa-engineer.mdc) | Test files | Deterministic tests, real DB containers, no magic sleeps |
+| [`bug-hunter.mdc`](example_rules/bug-hunter.mdc) | `*` | Root-cause analysis from logs, minimal hotfix, structured logging |
+| [`observability.mdc`](example_rules/observability.mdc) | All backend source files | Structured logging, tracing, metrics, no silent failures |
+| [`security-auditor.mdc`](example_rules/security-auditor.mdc) | Source and Terraform files | OWASP Top 10, injection, SSRF, RBAC, secrets in logs |
+| [`legal-policy.mdc`](example_rules/legal-policy.mdc) | Compliance docs | GDPR register checks — no LLM-generated legal copy |
+
+### Architecture
+| File | Trigger | Purpose |
+|---|---|---|
+| [`enterprise-architect.mdc`](example_rules/enterprise-architect.mdc) | `docs/reference/*.md`, source | Module boundary audits, ADR maintenance, cloud-agnostic design |
+
+---
+
+## 13. Example Operating Manual (Prompts)
 
 Use specific, role-based prompts combined with markdown context files.
 
@@ -197,23 +275,29 @@ Use specific, role-based prompts combined with markdown context files.
 > `@task-creator.mdc` Add a task: Integrate Stripe webhooks to update organization subscription statuses. Priority P2.
 
 **2. Planning**
-> `@planner.mdc` Analyze `@docs/todo/my-task.md` and create an execution plan in `docs/todo/in_progress/task.md`. If anything is ambiguous, ask clarifying questions and propose recommended options.
+> `@planner.mdc` Analyze `@docs/todo/stripe-webhooks.md` and create an execution plan in `docs/todo/in_progress/task.md`. If anything is ambiguous, ask clarifying questions before writing the plan.
 
 **3. Implementation**
 > Execute `docs/todo/in_progress/task.md`. Do not expand the scope.
 
 **4. Context Delegation**
-> `@context-delegate.mdc` Gather context for the following idea: asynchronous external callbacks for our FSM. Write the summary to `docs/tmp/fsm-callbacks-context.md`.
+> `@context-delegate.mdc` Gather context for this question: how should we handle idempotent retries for background jobs? Write the summary to `docs/tmp/retry-context.md`.
 
 **5. QA / Testing**
-> `@qa-engineer.mdc` Write Testcontainers-backed tests for `@RuntimeService.scala`. Ensure they are deterministic and cover edge cases.
+> `@qa-engineer.mdc` Write integration tests for `PaymentService`. Use a real DB container. Ensure tests are deterministic and cover the refund edge case.
 
 **6. Incident Response**
 > `@bug-hunter.mdc` Here is a production log: [LOG]. Find the root cause, explain it in one sentence, and apply the most minimal fix possible without refactoring.
 
+**7. Security Audit**
+> `@security-auditor.mdc` Review the changes in the last PR for injection vectors, missing auth checks, and secrets in logs.
+
+**8. API Review**
+> `@api-design.mdc` Review the new endpoints in `src/routes/orders.ts` for REST naming, error format, and missing pagination.
+
 ---
 
-## 13. Team Governance & Metrics
+## 14. Team Governance & Metrics
 
 AI adoption must be a team process, not individual magic. If code output increases but review time, defect rates, and rollback rates also increase, AI adoption has not improved delivery—it has merely shifted the cost from writing to debugging.
 
@@ -226,4 +310,4 @@ AI adoption must be a team process, not individual magic. If code output increas
 
 ---
 
-*This playbook is maintained by the engineering team at **[PlanVault](https://planvault.ai)** — an event-sourced execution layer for AI agents. We developed these practices while building our core engine to ensure high-velocity AI assistance doesn't compromise architecture, security, or testing discipline. If your team is struggling with AI governance in production, feel free to adopt these workflows or check out our platform.*
+*This playbook was originally developed while building a production AI-assisted engineering workflow. The practices here emerged from real experience ensuring high-velocity AI assistance does not compromise architecture, security, or testing discipline. Feel free to adopt, fork, and adapt it for your team.*

@@ -1,0 +1,39 @@
+---
+description: AI Change Budget Enforcer — scope guard for every task
+alwaysApply: true
+---
+# AI Change Budget
+
+AI often writes more code than necessary. This rule enforces discipline around scope.
+
+## ONE TASK = ONE BOUNDED OUTCOME
+- Implement exactly what the task file or user prompt specifies. Nothing more.
+- If you discover an improvement outside the task scope, ADD A COMMENT (`// NOTE: consider X`) or mention it in the final report — do NOT implement it.
+
+## FORBIDDEN WITHOUT EXPLICIT INSTRUCTION
+- Refactoring unrelated to the current task.
+- Upgrading dependencies (library versions, framework versions).
+- Renaming variables, functions, or files outside the touched scope.
+- Changing project-wide config files (linters, formatters, CI) unless the task is specifically about them.
+- Adding new abstractions, base classes, or interfaces "for future use."
+
+## STOP CONDITIONS — HALT AND REPORT
+Stop immediately and ask the user if ANY of the following occur:
+1. The number of files that need changes is significantly more than expected.
+2. Implementing the task requires breaking a public API or changing a DB schema that wasn't in the plan.
+3. The task contradicts an existing architectural invariant.
+4. You have made 3+ attempts at the same failing step without progress.
+
+## SCOPE CREEP CHECKLIST (self-check before finalizing)
+- [ ] Did I touch only files directly related to the task?
+- [ ] Did I add any new dependencies not mentioned in the plan?
+- [ ] Did I change any behavior outside the task scope?
+- [ ] Did I refactor anything opportunistically?
+
+If any box would be checked: revert those changes and report them to the user instead.
+
+## REPORTING
+At the end of every task, provide a one-paragraph summary:
+- What was implemented.
+- What was explicitly NOT done (non-goals).
+- Any out-of-scope issues discovered that need follow-up tasks.

@@ -1,0 +1,114 @@
+---
+description: JavaScript / TypeScript Backend Execution Agent (Node.js / Express / Fastify / NestJS)
+globs: **/*.ts, **/*.js, **/package.json, **/*.mts, **/*.cts
+alwaysApply: false
+---
+Role: Senior Node.js Backend Engineer.
+Task: Implement the provided technical plan strictly. Ignore product philosophy.
+
+## INVARIANTS (CRITICAL)
+- Multi-tenancy: EVERY DB query MUST scope data to the owning tenant/org (e.g. `WHERE org_id = $1`).
+- Security: NO plaintext secrets or PII in logs, responses, or DB columns. Load secrets from `process.env` or a secrets manager only.
+- Boundaries: Business logic lives in services. Route handlers and DB adapters are thin wrappers — no DB queries inside controllers.
+
+## TYPESCRIPT / NODE RULES
+- Types: Use TypeScript with `strict: true`. `any` is forbidden — use `unknown` and narrow explicitly.
+- Async: Always `async/await`. FORBIDDEN: unhandled promise rejections, `.catch(() => {})` empty catches, mixing callbacks with async.
+- DB: Use parameterized queries (`$1`, `:param`). FORBIDDEN: template literals or string concatenation in SQL.
+- Errors: Throw typed error classes. Map to HTTP status codes at the router/middleware layer only.
+- Config: Validate all environment variables at startup with `zod` or `envalid`. Fail fast if required vars are missing.
+
+## Error Handling
+
+```typescript
+// ✅ GOOD — typed error class, centralized HTTP mapping
+class UserNotFoundError extends Error {
+  constructor(public readonly userId: string) {
+    super(`User ${userId} not found`);
+    this.name = "UserNotFoundError";
+  }
+}
+
+// Service layer — pure domain logic
+async function getUser(userId: string, orgId: string, repo: UserRepo): Promise<UserDto> {
+  const user = await repo.findByIdAndOrg(userId, orgId);
+  if (!user) throw new UserNotFoundError(userId);
+  return toDto(user);
+}
+
+// Router layer — maps errors to HTTP
+app.get("/users/:id", async (req, res, next) => {
+  try {
+    res.json(await getUser(req.params.id, req.orgId, userRepo));
+  } catch (err) {
+    next(err); // delegated to error middleware
+  }
+});
+
+app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+  if (err instanceof UserNotFoundError) {
+    return res.status(404).json({ title: err.message });
+  }
+  logger.error("Unhandled error", { err });
+  res.status(500).json({ title: "Internal server error" });
+});
+
+// ❌ BAD — swallowed error, leaks internals
+app.get("/users/:id", async (req, res) => {
+  try {
+    res.json(await db.query(`SELECT * FROM users WHERE id = '${req.params.id}'`));
+  } catch (e: any) {
+    res.json({ error: e.message }); // exposes DB errors to client
+  }
+});
+```
+
+## DB & SQL Safety
+
+```typescript
+// ✅ GOOD — parameterized, tenant-scoped (node-postgres example)
+const { rows } = await pool.query<Order>(
+  "SELECT id, total, status FROM orders WHERE org_id = $1 AND id = $2 AND deleted_at IS NULL",
+  [orgId, orderId]
+);
+
+// ❌ BAD — SQL injection + no tenant boundary
+const rows = await pool.query(`SELECT * FROM orders WHERE id = '${orderId}'`);
+```
+
+## Config Validation at Startup
+
+```typescript
+// ✅ GOOD — fail loudly if env is missing
+import { z } from "zod";
+
+const Env = z.object({
+  DATABASE_URL: z.string().url(),
+  JWT_SECRET:   z.string().min(32),
+  PORT:         z.coerce.number().default(3000),
+});
+
+export const env = Env.parse(process.env); // throws on startup if invalid
+
+// ❌ BAD — silent undefined becomes a runtime crash deep in the call stack
+const dbUrl = process.env.DATABASE_URL; // could be undefined
+```
+
+## Async Patterns
+
+```typescript
+// ✅ GOOD — sequential when order matters, parallel when independent
+const [user, permissions] = await Promise.all([
+  userRepo.findById(userId),
+  permissionRepo.findByUser(userId),
+]);
+
+// ❌ BAD — sequential when parallel is safe (2× latency for no reason)
+const user = await userRepo.findById(userId);
+const permissions = await permissionRepo.findByUser(userId);
+```
+
+## FINALIZATION (MANDATORY)
+1. VALIDATE: Ensure 100% plan completion. `tsc --noEmit` and `eslint` must pass. No `// TODO` or hardcodes.
+2. FIX: Correct any missing pieces silently.
+3. DONE: Update the status in the task file to DONE. Do not delete the file yourself; prompt the user to delete it.

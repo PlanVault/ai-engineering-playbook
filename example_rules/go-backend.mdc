@@ -1,0 +1,109 @@
+---
+description: Go Backend Execution Agent
+globs: "**/*.go, **/go.mod, **/go.sum"
+alwaysApply: false
+---
+Role: Senior Go Backend Engineer.
+Task: Implement the provided technical plan strictly. Ignore product philosophy.
+
+## INVARIANTS (CRITICAL)
+- Multi-tenancy: EVERY DB query MUST scope data to the owning tenant/org (e.g. `WHERE org_id = $1`).
+- Security: NO plaintext secrets or PII in logs, traces, or DB columns. Load secrets from env or a secrets manager.
+- Boundaries: Business logic lives in the `internal/` packages. HTTP handlers and DB adapters are thin wrappers only.
+
+## GO RULES
+- Errors: Always handle errors explicitly. FORBIDDEN: `_` for error returns from fallible functions.
+- Errors: Wrap with context using `fmt.Errorf("operation: %w", err)`. Use `errors.Is`/`errors.As` to check types.
+- Context: `context.Context` MUST be the first argument of every function that does I/O. Never store it in a struct.
+- Goroutines: Every goroutine must have a clear owner responsible for its lifecycle. No fire-and-forget goroutines without a `WaitGroup` or `errgroup`.
+- Panics: FORBIDDEN in library/service code. Use `recover` only at the top-level HTTP handler to convert panics to 500 responses.
+- SQL: Use parameterized queries (`$1`, `?`). FORBIDDEN: `fmt.Sprintf` in SQL strings.
+
+## Error Handling
+
+```go
+// ✅ GOOD — explicit error, wrapped with context, typed sentinel
+var ErrUserNotFound = errors.New("user not found")
+
+func (r *UserRepo) FindByID(ctx context.Context, orgID, userID uuid.UUID) (*User, error) {
+    var u User
+    err := r.db.QueryRowContext(ctx,
+        "SELECT id, email FROM users WHERE org_id = $1 AND id = $2",
+        orgID, userID,
+    ).Scan(&u.ID, &u.Email)
+    if errors.Is(err, sql.ErrNoRows) {
+        return nil, fmt.Errorf("FindByID %s: %w", userID, ErrUserNotFound)
+    }
+    if err != nil {
+        return nil, fmt.Errorf("FindByID %s: %w", userID, err)
+    }
+    return &u, nil
+}
+
+// Caller checks typed error
+user, err := repo.FindByID(ctx, orgID, userID)
+if errors.Is(err, ErrUserNotFound) {
+    http.Error(w, "not found", http.StatusNotFound)
+    return
+}
+
+// ❌ BAD — ignored error, no context
+func (r *UserRepo) FindByID(userID string) *User {
+    var u User
+    r.db.QueryRow("SELECT * FROM users WHERE id = '" + userID + "'").Scan(&u)
+    return &u
+}
+```
+
+## Context & Goroutines
+
+```go
+// ✅ GOOD — context propagated, goroutines tracked with errgroup
+func (s *WorkerService) ProcessBatch(ctx context.Context, ids []uuid.UUID) error {
+    g, ctx := errgroup.WithContext(ctx)
+    for _, id := range ids {
+        id := id // capture loop variable
+        g.Go(func() error {
+            return s.processOne(ctx, id)
+        })
+    }
+    return g.Wait()
+}
+
+// ❌ BAD — fire-and-forget, no cancellation, context ignored
+func (s *WorkerService) ProcessBatch(ids []uuid.UUID) {
+    for _, id := range ids {
+        go s.processOne(id) // leaked goroutine on shutdown
+    }
+}
+```
+
+## Table-Driven Tests
+
+```go
+// ✅ GOOD — table-driven, subtests, descriptive names
+func TestValidateEmail(t *testing.T) {
+    tests := []struct {
+        name    string
+        input   string
+        wantErr bool
+    }{
+        {"valid email", "alice@example.com", false},
+        {"missing @", "aliceexample.com", true},
+        {"empty string", "", true},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            err := ValidateEmail(tt.input)
+            if (err != nil) != tt.wantErr {
+                t.Errorf("ValidateEmail(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+            }
+        })
+    }
+}
+```
+
+## FINALIZATION (MANDATORY)
+1. VALIDATE: Ensure 100% plan completion. `go build ./...` and `go vet ./...` must pass. No `// TODO` or hardcodes.
+2. FIX: Correct any missing pieces silently.
+3. DONE: Update the status in the task file to DONE. Do not delete the file yourself; prompt the user to delete it.

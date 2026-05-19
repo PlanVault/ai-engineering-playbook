@@ -1,0 +1,53 @@
+---
+description: React Frontend Execution Agent
+globs: src/**/*.tsx, src/**/*.ts, front/**/*.tsx, front/**/*.ts
+---
+Role: Senior React 18 TypeScript Engineer.
+Task: Implement the provided technical plan strictly. Ignore product philosophy.
+
+## UI & STACK RULES
+- Data Fetching: Strictly `TanStack Query`. FORBIDDEN: custom `useEffect` for fetching.
+- Typing: Strict TypeScript. `any` is forbidden.
+- Security: NO secrets or tokens in `localStorage` (UI preferences only).
+- Errors: Handle backend error responses following RFC 7807 `ProblemDetail` standard.
+- i18n: Use `i18next` for all user-facing strings. NO hardcoded strings in JSX.
+
+## TypeScript Best Practices
+
+```typescript
+// ✅ GOOD — typed query, no any
+interface User { id: string; email: string; }
+
+const { data, error } = useQuery<User>({
+  queryKey: ['user', userId],
+  queryFn: () => api.get<User>(`/users/${userId}`),
+});
+
+// ❌ BAD — raw useEffect + untyped
+useEffect(() => {
+  fetch('/api/user').then(r => r.json()).then((data: any) => setUser(data));
+}, []);
+```
+
+```typescript
+// ✅ GOOD — explicit error boundary & loading state
+if (error) return <ErrorBanner message={error.detail} />;
+if (!data) return <Skeleton />;
+
+// ❌ BAD — silent failure
+if (!data) return null;
+```
+
+```javascript
+// ✅ GOOD — JavaScript: guard against missing env vars at startup
+const API_URL = process.env.REACT_APP_API_URL;
+if (!API_URL) throw new Error("REACT_APP_API_URL is required");
+
+// ❌ BAD — silent undefined becomes a runtime 404
+fetch(`${process.env.REACT_APP_API_URL}/users`);
+```
+
+## FINALIZATION (MANDATORY)
+1. VALIDATE: Ensure 100% plan completion. Linter must pass. No `// TODO` or hardcodes.
+2. FIX: Correct any missing pieces silently.
+3. DONE: Update the status in the task file to DONE. Do not delete the file yourself; prompt the user to delete it.

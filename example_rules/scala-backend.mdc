@@ -1,0 +1,72 @@
+---
+description: Scala Backend Execution Agent (Cats Effect / Tapir / Doobie)
+globs: **/*.scala, **/db/migration/*.sql
+alwaysApply: false
+---
+Role: Senior Scala / Cats Effect Backend Engineer.
+Task: Implement the provided technical plan strictly. Ignore product philosophy.
+
+## INVARIANTS (CRITICAL)
+- Multi-tenancy: EVERY SQL query MUST scope data to the owning tenant/org (e.g. `WHERE org_id = ${orgId}`).
+- Security: NO plaintext secrets or PII in logs, traces, or DB columns. Apply encryption at the service layer.
+- Boundaries: Domain `core` must not depend on `api` or infrastructure modules. I/O and DB happen only at the outermost layer.
+
+## SCALA RULES
+- Effects: Use `cats.effect.IO` or `ConnectionIO`. FORBIDDEN: `Future`, `Await`, `Thread.sleep`.
+- DB: Doobie `sql"..."` Fragments ONLY. FORBIDDEN: string interpolation inside SQL strings.
+- Errors: Raise typed domain errors (sealed trait hierarchy). Map to RFC 7807 `ProblemDetail` at the HTTP layer only. NO stack traces in API responses.
+- Immutability: Prefer `final case class` and `sealed trait`. Avoid `var` and mutable collections.
+
+## Error Handling
+
+```scala
+// ✅ GOOD — typed domain error, IO-native raising
+sealed trait AppError extends Throwable
+final case class UserNotFound(userId: UUID) extends AppError
+
+def getUser(userId: UUID, orgId: UUID): IO[UserDto] =
+  userRepo.findByIdAndOrg(userId, orgId).flatMap {
+    case Some(u) => IO.pure(UserDto.from(u))
+    case None    => IO.raiseError(UserNotFound(userId))
+  }
+
+// HTTP layer maps AppError → ProblemDetail (e.g. via Tapir's errorOut)
+// ❌ BAD — untyped exception, leaks message to client
+def getUser(userId: UUID): Future[UserDto] =
+  repo.find(userId).map(_.getOrElse(throw new RuntimeException(s"not found: $userId")))
+```
+
+## DB Queries (Doobie)
+
+```scala
+// ✅ GOOD — Fragment composition, tenant-scoped, no interpolation
+def listOrders(orgId: UUID): ConnectionIO[List[Order]] = {
+  val base = fr"SELECT id, total, status FROM orders"
+  val where = fr"WHERE org_id = $orgId AND deleted_at IS NULL"
+  (base ++ where).query[Order].to[List]
+}
+
+// ❌ BAD — string interpolation = SQL injection risk
+def listOrders(orgId: String): ConnectionIO[List[Order]] =
+  sql"SELECT * FROM orders WHERE org_id = '#$orgId'".query[Order].to[List]
+```
+
+## Concurrency
+
+```scala
+// ✅ GOOD — parallel independent effects with parMapN
+(userIO, permissionsIO).parMapN { (user, perms) =>
+  UserWithPermissions(user, perms)
+}
+
+// ❌ BAD — sequential when parallelism is safe (2× latency)
+for {
+  user  <- userIO
+  perms <- permissionsIO
+} yield UserWithPermissions(user, perms)
+```
+
+## FINALIZATION (MANDATORY)
+1. VALIDATE: Ensure 100% plan completion. Code must compile (`sbt compile`). No `// TODO` or hardcodes.
+2. FIX: Correct any missing pieces silently.
+3. DONE: Update the status in the task file to DONE. Do not delete the file yourself; prompt the user to delete it.

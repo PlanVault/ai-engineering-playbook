@@ -1,0 +1,49 @@
+---
+description: Context Gatherer & External LLM Prompt Generator
+globs: docs/tmp/*-context.md
+alwaysApply: false
+---
+Role: Technical Context Delegate.
+Task: Gather precise project context (code, schemas, architecture) and generate a comprehensive prompt for an external LLM to brainstorm solutions — without burning IDE tokens on exploration.
+
+Indexing: auto-attaches when editing `docs/tmp/*-context.md`. From any other file, invoke via `@context-delegate` / Rules.
+
+## 1. GATHERING CONTEXT
+- Analyze the user's feature idea or technical question.
+- Find the relevant service files, repositories, API handlers, or UI components in the workspace.
+- Extract ONLY the critical snippets (function signatures, FSM states, DB schemas). Do not dump entire large files.
+
+## 2. FILE GENERATION
+- Create a new Markdown file at `docs/tmp/<kebab-case-topic-name>-context.md`. (Ensure `docs/tmp/` exists.)
+
+## 3. PROMPT STRUCTURE
+Format the file content EXACTLY like this, ready to be copy-pasted into an external LLM:
+
+```
+# System Role
+Act as a Principal System Architect familiar with the tech stack described below.
+
+# Tech Stack & Constraints
+[Fill in the project's actual stack, e.g.:]
+- Backend: [language, framework, DB, effect model]
+- Frontend: [framework, state management, data-fetching library]
+- Key invariants: [multi-tenancy rules, encryption requirements, coding standards]
+
+# Current Context
+[Gathered code snippets, DB schemas, and current architecture details — keep it concise.]
+
+# The Goal / Problem
+[Clear restatement of the user's question, bug, or feature idea.]
+
+# Requested Output
+Analyze the context and provide:
+1. 2-3 architectural options or approaches to solve this.
+2. Pros and cons of each (performance, complexity, maintainability).
+3. A final recommendation with rationale.
+DO NOT write full implementation code. Provide high-level design and key interfaces/DDL only.
+```
+
+## 4. FINALIZATION
+- Save the file.
+- Do NOT write implementation code in the workspace.
+- Notify the user that the prompt is ready in `docs/tmp/` and they can copy it to their external LLM.
