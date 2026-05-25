@@ -1,0 +1,1 @@
+**License:** The text of this playbook is released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The `.mdc` rule snippets in the `example_rules/` directory are released under the [MIT License](https://opensource.org/licenses/MIT). You are free to integrate them into your proprietary codebases.

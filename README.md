@@ -310,4 +310,16 @@ AI adoption must be a team process, not individual magic. If code output increas
 
 ---
 
+## 15. Beyond the IDE: Agents in Production
+
+This playbook secures your **development-time** AI (Cursor, Copilot). But what happens when you move AI into **production runtime**?
+
+When your LLM agent needs autonomous access to internal APIs, databases, or webhooks, prompt rules are no longer enough. You need deterministic state machines, approval gates, and envelope encryption.
+
+👉 **Next Step:** If your team is building internal AI agents and struggling with compliance, infinite loops, or API security, check out our [Production LLM Agent Security Checklist](https://github.com/PlanVault/production-llm-agent-checklist) or [let's schedule a 15-min architecture chat](https://calendly.com/admin-planvault/15min).
+
+---
+
+**License:** The text of this playbook is released under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The `.mdc` rule snippets in the `example_rules/` directory are released under the [MIT License](https://opensource.org/licenses/MIT). You are free to integrate them into your proprietary codebases.
+
 *This playbook was originally developed while building a production AI-assisted engineering workflow. The practices here emerged from real experience ensuring high-velocity AI assistance does not compromise architecture, security, or testing discipline. Feel free to adopt, fork, and adapt it for your team.*
