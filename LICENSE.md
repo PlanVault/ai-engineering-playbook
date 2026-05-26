@@ -10,7 +10,7 @@ This repository contains two distinct types of content, which are licensed separ
 ## 1. MIT License
 *(Applies to code and `.mdc` rules)*
 
-Copyright (c) 2026 PlanVault.ai
+Copyright (c) 2026 PlanVault™
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
