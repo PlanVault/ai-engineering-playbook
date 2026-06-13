@@ -1,6 +1,6 @@
 # AI-Assisted Engineering Playbook
 
-> A practical playbook for engineering teams actively adopting AI coding tools (Copilot, Cursor, Codeium, etc.) in product engineering. This document outlines how to structure your codebase, define rules, manage context, and enforce testing to ensure AI accelerates delivery without degrading architecture, security, or quality.
+> A practical playbook for engineering teams actively adopting AI coding tools (Copilot, Cursor, Claude, etc.) in product engineering. This document outlines how to structure your codebase, manage knowledge, define rules, manage context, and enforce testing to ensure AI accelerates delivery without degrading architecture, security, or quality.
 >
 > **Core Principle:** AI-generated code is never "done" just because it compiles. It is only done when deterministic tools, tests, and human review confirm its behavior. AI accelerates typing and scaffolding, but it does not replace engineering discipline.
 
@@ -28,16 +28,17 @@
 
 ## 1. Core Principles
 
-1. **AI-readable, not AI-distorted.** The codebase must be understandable for both AI and humans. Do not break domain models just for the sake of model retrieval.
-2. **Tests before scale.** Active AI coding requires a deterministic safety net: compile, unit, integration, e2e, lint, and security checks.
+1. **Human-and-AI-readable.** Infrastructure, code, and documentation must work effectively for both humans and AI agents — not one at the expense of the other.
+2. **Tests before scale.** Active AI coding requires a deterministic safety net: compile, unit, integration, e2e, lint, and security checks — set up before generating code at scale.
 3. **Small bounded changes.** A single AI task must have a clear scope, explicit non-goals, and a test plan.
 4. **Rules over vibes.** Formalize style, architectural invariants, security constraints, and review gates in repository rules.
-5. **Least privilege context.** The model should only see what is strictly necessary for the task at hand.
+5. **Granular context and tool access.** The model should only see the files and tools strictly necessary for the task at hand.
 6. **Separate roles.** Planning, implementation, review, and incident debugging should be separated by roles or dedicated AI sessions.
 7. **Escalate early.** If a smaller model fails after 2-3 iterations, open a new context window and escalate to a stronger reasoning model.
 8. **No silent authority.** AI does not make architectural decisions without an explicit plan and human review.
 9. **Verification is mandatory.** AI-generated code is not done until tests pass and human review is complete.
 10. **Cost is a product constraint.** Token budget, context size, and model selection must be managed like any other engineering resource.
+11. **Agentic engineering is a living process.** Models change, tools change, requirements change. What worked last quarter may not work today. Tune continuously, per project.
 
 ---
 
@@ -60,7 +61,42 @@ AI coding tools retrieve context via keyword search, embeddings, file names, sym
 
 ---
 
-## 3. Context and Data Boundaries
+## 3. Knowledge Base Infrastructure
+
+**The most impactful, most overlooked step.** Before you can effectively use AI agents at scale, you need a structured, machine-readable knowledge base that lives alongside your code.
+
+### Core Idea
+Convert your existing documentation — Confluence pages, Notion docs, Google Docs, internal wikis — into `.md` files placed near the code they describe. Agents read files directly; they don't need a RAG pipeline if your knowledge is well-organized.
+
+### Structure
+```
+docs/
+  architecture/       # System design, ADRs, bounded context maps
+  api/                # API contracts, versioning decisions
+  runbooks/           # Operational procedures
+  onboarding/         # Team onboarding, coding standards
+  reference/          # Domain glossary, third-party integrations
+  todo/               # Active tasks (in_progress/, backlog/)
+  tmp/                # Temporary context files for agents
+knowledge/
+  product/            # Product specs, business rules
+  compliance/         # GDPR, security policies
+```
+
+### Rules
+* Every top-level service or module gets a `README.md` explaining its purpose, boundaries, and key entry points.
+* Add an `AGENTS.md` (or `README.md`) to each significant directory with a brief description for AI agents.
+* Keep documentation close to the code it describes — not in a separate monolithic wiki.
+* Update docs as part of the same PR that changes the code.
+
+### RAG Is Not a Silver Bullet
+RAG does not solve documentation debt. If your existing knowledge is scattered, contradictory, or outdated, a RAG pipeline will return scattered, contradictory, outdated answers. Fix the source first.
+
+> **Rule of thumb:** If a new engineer can't find the answer in your `docs/` folder in 5 minutes, an AI agent can't find it reliably either.
+
+---
+
+## 4. Context and Data Boundaries
 
 An AI tool does not need to see your entire monorepo, production logs, secrets, or customer data just because it is technically possible.
 
@@ -77,9 +113,9 @@ An AI tool does not need to see your entire monorepo, production logs, secrets, 
 
 ---
 
-## 4. Rules Architecture
+## 5. Rules Architecture
 
-Repository rules (e.g., `.cursorrules`) should be concise at the root level and detailed only where necessary.
+Repository rules (e.g., `.cursor/rules/`) should be concise at the root level and detailed only where necessary.
 
 ### The Root Rule
 The root rule applies to every prompt and must be extremely concise to save context and maintain focus. It should only contain:
@@ -96,9 +132,76 @@ Keep detailed rules in separate files invoked only when needed:
 * Security review checklists.
 * QA / Testing standards.
 
+### Sharing Rules Across Tools
+If your team uses different AI tools (some use Cursor, others Claude, others Copilot), write rules to be portable:
+* Store canonical rules in `docs/rules/` or `.cursor/rules/`.
+* Add an `AGENTS.md` file in each key directory — Claude and other agents pick these up automatically.
+* Cursor's `.mdc` rules and Claude's `AGENTS.md` can reference the same underlying guidelines.
+* Link to the shared rules from each tool-specific config so they stay in sync.
+
 ---
 
-## 5. The AI SDLC (Software Development Life Cycle)
+## 6. Granular Tool & Context Profiles
+
+Do not give every agent session access to everything. Compose the minimum set of tools and files for the task.
+
+### Why It Matters
+* Excess context increases cost, latency, and the risk of hallucination.
+* A test-writing agent does not need production DB access.
+* A planning agent does not need filesystem write access.
+
+### Example Profiles
+| Role | Files | Tools |
+|---|---|---|
+| **Planner** | `docs/`, architecture files | `web-search`, `read` |
+| **Implementer** | Relevant module only | `read`, `write`, `terminal` (tests only) |
+| **Reviewer** | Changed files + test files | `read`, `git-diff` |
+| **QA Engineer** | Test files + source under test | `read`, `write`, `test-runner` |
+| **Context Delegate** | Entire repo | `read`, `search` (no write) |
+
+### MCP / Integration Hygiene
+* Enable MCP servers per-project, not globally.
+* Disable integrations that are not needed for the current task category.
+* Audit which tools are active before starting a long agentic run.
+
+---
+
+## 7. Meta Repository Pattern (Microservices)
+
+When services live in separate repositories, no single AI agent can see the full picture. Cross-service changes become fragmented and error-prone.
+
+### The Problem
+* Agent writes code in Service A without knowing Service B's contract changed.
+* Planning agent can't reason about end-to-end flows.
+* No shared rules, no shared documentation.
+
+### Solution: Meta Repository
+Create a `meta` or `platform` repository that:
+* Links to each service repo as a `git submodule` (or contains pointer files).
+* Contains system-wide architecture docs, ADRs, and bounded context maps.
+* Holds shared rules (`.cursor/rules/`, `AGENTS.md`) that individual repos reference.
+* Documents the public API contract of each service.
+* Becomes the entry point for any cross-service planning task.
+
+```
+meta-repo/
+  README.md              # System overview
+  docs/
+    architecture/        # C4 diagrams, ADRs
+    services/            # One file per service: purpose, API, owners
+    contracts/           # Shared event schemas, API types
+  .cursor/rules/         # Shared rules all services inherit
+  AGENTS.md              # System-level context for AI agents
+  services/
+    service-a/           # git submodule or pointer
+    service-b/
+```
+
+> **Practical tip:** Even without submodules, maintaining a `docs/services/` directory in the meta repo — with one `.md` per service describing its purpose, API surface, and dependencies — gives AI agents the cross-service context they need for planning.
+
+---
+
+## 8. The AI SDLC (Software Development Life Cycle)
 
 AI-assisted development works best as a pipeline, not as a single, endless chat thread.
 
@@ -110,19 +213,24 @@ AI-assisted development works best as a pipeline, not as a single, endless chat 
 * **Goal:** A strong reasoning model analyzes the task and creates an execution plan.
 * **Output:** A plan containing objectives, likely touched files, API changes, security/migration risks, and a test plan.
 
-### 3. Implementation
-* **Goal:** A medium/coding model executes the exact plan.
+### 3. Spec File (Before Implementation)
+* **Goal:** Before writing a single line of code, produce a spec: API contract, expected behavior, edge cases, and test cases.
+* **Output:** A `spec.md` file alongside the task file.
+* **Why:** The implementer reads the spec, not the chat history. The spec becomes the source of truth and the review checklist.
+
+### 4. Implementation
+* **Goal:** A medium/coding model executes the exact plan against the spec.
 * **Rules:** Execute the plan only. No scope expansion. No opportunistic refactoring. No silent dependency upgrades. Stop and ask for clarification if the plan is flawed.
 
-### 4. Review and Cleanup
-* **Goal:** The AI reviewer does not just "polish" code; it looks for bugs, regressions, security gaps, and missing tests.
+### 5. Review and Cleanup
+* **Goal:** The AI reviewer does not just "polish" code; it looks for bugs, regressions, security gaps, and missing tests — checked against the original spec.
 
-### 5. Final Verification (Deterministic)
-* **Goal:** Hard gates before commit/PR (Compile, Unit/Integration/E2E tests, Linting, Security checks).
+### 6. Final Verification (Deterministic)
+* **Goal:** Hard gates before commit/PR (Compile, Unit/Integration/E2E tests, Linting, Security checks). Agents must be able to run these themselves and self-correct.
 
 ---
 
-## 6. Role Separation
+## 9. Role Separation
 
 Do not give a single AI session the freedom to plan, write, review, and debug endlessly.
 
@@ -138,7 +246,7 @@ Do not give a single AI session the freedom to plan, write, review, and debug en
 
 ---
 
-## 7. The Context Delegate Pattern
+## 10. The Context Delegate Pattern
 
 To save costs and improve focus, use a fast/cheap model to gather context before executing complex tasks.
 
@@ -148,7 +256,7 @@ To save costs and improve focus, use a fast/cheap model to gather context before
 
 ---
 
-## 8. AI Change Budgets
+## 11. AI Change Budgets
 
 AI often writes more code than necessary. This must be constrained.
 
@@ -162,29 +270,53 @@ AI often writes more code than necessary. This must be constrained.
 
 ---
 
-## 9. Testing and Verification Ladder
+## 12. Testing and Verification Ladder
 
-The more code AI writes, the stronger your automated verification must be. AI-generated code is not done because it "looks right."
+**Set up your test infrastructure before you start generating code at scale.** Without it, agents cannot verify their own output, and you lose the feedback loop that makes AI development safe.
 
-**Before heavy AI adoption:**
-* Elevate compile/typecheck to a reliable baseline.
+### Before Heavy AI Adoption (Non-Negotiable)
+* CI pipeline must enforce: `lint → typecheck → unit tests → integration tests` with hard failure on any step.
 * Cover core business logic with unit tests.
 * Add integration tests for persistence, API boundaries, auth, and webhooks.
-* Remove or isolate flaky tests.
+* Remove or isolate flaky tests — flaky tests destroy agent self-correction.
+* Agents must be able to run the full test suite locally and interpret the output.
 
-**After every AI change:**
+### After Every AI Change
 1. Compile / Typecheck.
 2. Unit tests for touched logic.
 3. Integration tests for persistence/API changes.
 4. Lint / Format.
 
+### Self-Correcting Agents
+When agents can run tests themselves, they can iterate to green without human intervention. This only works if:
+* Tests are deterministic (no random seeds, no time-dependent behavior, no magic sleeps).
+* Test output is human-readable and parseable (clear failure messages, not stack dumps).
+* The test command is documented in `README.md` or a `Makefile`.
+
 ---
 
-## 10. AI Code Review Checklist
+## 13. Mandatory CI/CD Gates
+
+Automate review-time checks before the team starts generating code at volume. These gates are the safety net for everything above.
+
+### Required Gates (Block Merge if Failing)
+* **Lint & Format** — `eslint`, `ruff`, `golangci-lint`, etc.
+* **Typecheck** — `tsc --noEmit`, `mypy`, etc.
+* **Unit Tests** — all must pass, coverage threshold enforced.
+* **Integration Tests** — DB, API, auth boundaries.
+* **Security Scan** — `trivy`, `semgrep`, `tfsec` for infra changes.
+* **Conventional Commits** — enforced by CI, not by honor system.
+
+### Why This Must Come First
+AI agents write code faster than humans can review it. Without automated gates, defects accumulate invisibly. With them, agents self-correct before the PR even opens.
+
+---
+
+## 14. AI Code Review Checklist
 
 When reviewing AI-generated code, humans (and AI reviewers) must look for production risks, not just stylistic preferences:
 
-* Does the change exactly match the task/plan?
+* Does the change exactly match the task/plan/spec?
 * Are there unrelated edits?
 * Are architectural boundaries respected?
 * Are all SQL/DB paths safely tenant-scoped?
@@ -196,7 +328,7 @@ When reviewing AI-generated code, humans (and AI reviewers) must look for produc
 
 ---
 
-## 11. Debugging and Escalation Rules
+## 15. Debugging and Escalation Rules
 
 AI debugging can easily devolve into an infinite loop of breaking and fixing.
 
@@ -209,7 +341,25 @@ AI debugging can easily devolve into an infinite loop of breaking and fixing.
 
 ---
 
-## 12. Example Rules Library
+## 16. Model Benchmarking and Selection
+
+Different models have different strengths. Periodic evaluation on your real tasks is the only reliable way to know which model to use for what.
+
+### Benchmark Process
+* **Frequency:** Monthly or after a significant model release.
+* **Task categories:** Planning, code generation, refactoring, writing tests, SQL, debugging, documentation.
+* **Measure:** Number of iterations to success, % of PRs accepted without revision, review time, escaped bugs.
+
+### Practical Guidance
+* Strong reasoning models (o3, Claude Opus) → planning, architecture, cross-service analysis.
+* Medium coding models (Claude Sonnet, GPT-4o) → implementation, refactoring.
+* Fast/cheap models (Haiku, GPT-4o-mini) → context gathering, formatting, simple lookups.
+* Do not use a reasoning model for trivial completions — the cost and latency are unjustified.
+* Track results in a shared doc or spreadsheet so the team learns collectively, not individually.
+
+---
+
+## 17. Example Rules Library
 
 All rules live in [`example_rules/`](example_rules/). Copy the ones you need into `.cursor/rules/`.
 
@@ -267,7 +417,7 @@ All rules live in [`example_rules/`](example_rules/). Copy the ones you need int
 
 ---
 
-## 13. Example Operating Manual (Prompts)
+## 18. Example Operating Manual (Prompts)
 
 Use specific, role-based prompts combined with markdown context files.
 
@@ -277,29 +427,32 @@ Use specific, role-based prompts combined with markdown context files.
 **2. Planning**
 > `@planner.mdc` Analyze `@docs/todo/stripe-webhooks.md` and create an execution plan in `docs/todo/in_progress/task.md`. If anything is ambiguous, ask clarifying questions before writing the plan.
 
-**3. Implementation**
-> Execute `docs/todo/in_progress/task.md`. Do not expand the scope.
+**3. Spec**
+> Based on `docs/todo/in_progress/task.md`, write a spec file at `docs/todo/in_progress/task-spec.md`. Include: API contract, expected behavior, edge cases, and a list of test cases that must pass before this is considered done.
 
-**4. Context Delegation**
+**4. Implementation**
+> Execute `docs/todo/in_progress/task.md` against `docs/todo/in_progress/task-spec.md`. Do not expand the scope. Run tests after each logical change and self-correct before reporting done.
+
+**5. Context Delegation**
 > `@context-delegate.mdc` Gather context for this question: how should we handle idempotent retries for background jobs? Write the summary to `docs/tmp/retry-context.md`.
 
-**5. QA / Testing**
+**6. QA / Testing**
 > `@qa-engineer.mdc` Write integration tests for `PaymentService`. Use a real DB container. Ensure tests are deterministic and cover the refund edge case.
 
-**6. Incident Response**
+**7. Incident Response**
 > `@bug-hunter.mdc` Here is a production log: [LOG]. Find the root cause, explain it in one sentence, and apply the most minimal fix possible without refactoring.
 
-**7. Security Audit**
+**8. Security Audit**
 > `@security-auditor.mdc` Review the changes in the last PR for injection vectors, missing auth checks, and secrets in logs.
 
-**8. API Review**
+**9. API Review**
 > `@api-design.mdc` Review the new endpoints in `src/routes/orders.ts` for REST naming, error format, and missing pagination.
 
 ---
 
-## 14. Team Governance & Metrics
+## 19. Team Governance & Metrics
 
-AI adoption must be a team process, not individual magic. If code output increases but review time, defect rates, and rollback rates also increase, AI adoption has not improved delivery—it has merely shifted the cost from writing to debugging.
+AI adoption must be a team process, not individual magic. If code output increases but review time, defect rates, and rollback rates also increase, AI adoption has not improved delivery — it has merely shifted the cost from writing to debugging.
 
 **Track these metrics:**
 * Cycle time per task.
@@ -307,10 +460,26 @@ AI adoption must be a team process, not individual magic. If code output increas
 * Defect rate after merge / Escaped bugs.
 * Flaky tests introduced.
 * Number of AI iterations before success (measure loop waste).
+* Model benchmarks per task category (updated quarterly).
 
 ---
 
-## 15. Beyond the IDE: Agents in Production
+## 20. Agentic Engineering is a Living Process
+
+There is no universal playbook. Every project has different constraints, a different codebase, different team habits, and a different risk profile. The model landscape changes every quarter.
+
+**What this means in practice:**
+* Revisit your rules every 1-2 months. What was a good rule for GPT-4 may over-constrain Claude 3.7 or under-constrain a newer model.
+* Run model benchmarks on your actual tasks — not synthetic benchmarks.
+* Iterate on context profiles as your codebase grows. A profile that worked for a 50k LOC codebase will need tuning at 500k LOC.
+* Share learnings across the team. AI productivity is multiplicative when the team builds shared conventions, not siloed workflows.
+* Treat `docs/`, `.cursor/rules/`, and `AGENTS.md` as first-class engineering artifacts — reviewed, versioned, and owned.
+
+> The teams that get the most out of AI are not the ones that found the perfect setup on day one. They are the ones that iterate on their tooling as deliberately as they iterate on their product.
+
+---
+
+## 21. Beyond the IDE: Agents in Production
 
 This playbook secures your **development-time** AI (Cursor, Copilot). But what happens when you move AI into **production runtime**?
 
